@@ -1,0 +1,11 @@
+{
+  "name": "Surge Board #270",
+  "description": "An exclusive Surge Board with the appearance Celestial on a Ranger Green background with Sleepy Unicorn icons.",
+  "image": "https://nft.fragment.com/gift/surgeboard-270.webp",
+  "attributes": [
+    {"trait_type": "Model", "value": "Celestial"},
+    {"trait_type": "Backdrop", "value": "Ranger Green"},
+    {"trait_type": "Symbol", "value": "Sleepy Unicorn"}
+  ],
+  "lottie": "https://nft.fragment.com/gift/surgeboard-270.lottie.json"
+}
