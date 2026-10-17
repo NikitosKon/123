@@ -23,7 +23,7 @@ log = logging.getLogger("main")
 async def amain() -> None:
     settings = get_settings()
     if not settings.bot_token:
-        raise SystemExit("BOT_TOKEN не задан — заполните .env (см. .env.example)")
+        raise SystemExit("BOT_TOKEN не задан — укажите его в .env или переменных окружения")
 
     bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = setup_dispatcher(settings)

@@ -20,7 +20,7 @@ Telegram-бот-агрегатор коллекционных подарков T
 ## Быстрый старт
 
 ```bash
-cp .env.example .env   # BOT_TOKEN, ADMIN_IDS и при необходимости authData
+# Создай локальный .env с BOT_TOKEN, ADMIN_IDS, DATABASE_URL и REDIS_URL; не коммить его
 docker compose up -d --build
 ```
 
@@ -39,7 +39,7 @@ GETGEMS_API_KEY=твой_ключ
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # BOT_TOKEN, DATABASE_URL
+# Создай локальный .env с BOT_TOKEN, DATABASE_URL и REDIS_URL; не коммить его
 alembic upgrade head
 python -m app.main
 ```
@@ -75,7 +75,7 @@ python scripts/demo_card.py   # -> card_preview.png
 - API key для Getgems (`GETGEMS_API_KEY`); Tonnel может требовать residential IP/proxy, если Infrlo блокируется Cloudflare
 - authData/токены для Portals/Thermos (ротация, TTL initData)
 - Redis-backed dedup (сейчас in-memory) и per-user rate limiting
-- Персистентные user filters через `/settings` (сейчас читаются из .env-дефолтов)
+- Персистентные user filters через `/settings` (сейчас читаются из настроек по умолчанию)
 - Курс TON/USD провайдер (`TON_PRICE_PROVIDER`) для нормализации USD/USDT
 - Алерты на падение источников (Telegram admin), Prometheus-метрики
 - Webhook-режим бота вместо polling
