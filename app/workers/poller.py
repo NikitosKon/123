@@ -10,11 +10,40 @@ from pathlib import Path
 from aiogram import Bot
 
 from app.bot.handlers import build_card_for_deal, ctx, send_deal_card
-from app.domain.enums import SourceStatus
+from app.domain.enums import Currency, SourceStatus
+from app.domain.models import NormalizedListing
 from app.services.floors import exact_variant_floor, gift_floor, model_floor
 from app.services.profit import analyze_deal, is_worth_alert
 
 log = logging.getLogger(__name__)
+
+
+def select_resale_listing(
+    target: NormalizedListing, listings: list[NormalizedListing]
+) -> NormalizedListing | None:
+    """Lowest comparable active ask excluding the listing being evaluated.
+
+    Excluding the candidate matters: using the current model floor as the resale
+    price includes the buy listing itself, which makes a positive spread
+    impossible for the cheapest listing.
+    """
+    ton_currencies = {Currency.TON, Currency.GRAM}
+    if target.currency not in ton_currencies or not target.model:
+        return None
+
+    candidates = [
+        listing
+        for listing in listings
+        if listing.is_active
+        and not listing.is_auction
+        and listing.listing_id != target.listing_id
+        and listing.marketplace == target.marketplace
+        and listing.gift_name.casefold() == target.gift_name.casefold()
+        and listing.model.casefold() == target.model.casefold()
+        and listing.currency in ton_currencies
+        and listing.price > 0
+    ]
+    return min(candidates, key=lambda listing: listing.price, default=None)
 
 
 class CollectorWorker:
@@ -31,13 +60,10 @@ class CollectorWorker:
         if not self.notify_chat_ids:
             log.warning("collector has no notification recipients; set ADMIN_IDS in .env")
         while not self._stop.is_set():
-            for adapter in c.adapters:
-                if adapter.status != SourceStatus.LIVE:
-                    continue
-                try:
-                    await self._process_adapter(adapter, max_age)
-                except Exception as exc:  # noqa: BLE001 — источник упал, сборщик живёт дальше
-                    log.error("adapter %s failed: %s", adapter.marketplace.value, exc)
+            live_adapters = [a for a in c.adapters if a.status == SourceStatus.LIVE]
+            await asyncio.gather(
+                *(self._process_adapter_safely(adapter, max_age) for adapter in live_adapters)
+            )
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=interval)
             except asyncio.TimeoutError:
@@ -45,6 +71,12 @@ class CollectorWorker:
 
     def stop(self) -> None:
         self._stop.set()
+
+    async def _process_adapter_safely(self, adapter, max_age: timedelta) -> None:
+        try:
+            await self._process_adapter(adapter, max_age)
+        except Exception as exc:  # noqa: BLE001 — источник упал, сборщик живёт дальше
+            log.error("adapter %s failed: %s", adapter.marketplace.value, exc)
 
     async def _process_adapter(self, adapter, max_age: timedelta) -> None:
         c = ctx()
@@ -63,6 +95,7 @@ class CollectorWorker:
             "duplicates": 0,
             "sent": 0,
         }
+        pool_cache: dict[str, list[NormalizedListing]] = {}
 
         # активные листинги того же подарка для floor (из того же источника)
         for l in listings:
@@ -74,13 +107,26 @@ class CollectorWorker:
                 continue  # протухший листинг
             stats["fresh"] += 1
 
-            pool = await adapter.fetch_active_listings(gift_name=l.gift_name, limit=30)
+            # TON и GRAM взаимозаменяемы 1:1; другие валюты пока не участвуют
+            # в оценке, потому что сетевые/трансферные комиссии заданы в TON.
+            if l.currency not in (Currency.TON, Currency.GRAM):
+                stats["not_profitable"] += 1
+                continue
+
+            gift_key = l.gift_name.casefold()
+            if gift_key not in pool_cache:
+                pool_cache[gift_key] = await adapter.fetch_active_listings(
+                    gift_name=l.gift_name, limit=30
+                )
+            pool = pool_cache[gift_key]
             gf = gift_floor(l, pool)
             mf = model_floor(l, pool)
             ef = exact_variant_floor(l, pool)
 
-            # консервативная цена выхода: model floor (не самая дорогая цена)
-            sell_price = mf.value if mf and mf.value else None
+            # Для цены перепродажи берём ближайший ask того же model после
+            # покупки, исключая проверяемый листинг из пула.
+            resale_listing = select_resale_listing(l, pool)
+            sell_price = resale_listing.price if resale_listing else None
 
             deal = analyze_deal(
                 l,

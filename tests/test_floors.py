@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.adapters.tonnel import TonnelAdapter
-from app.domain.enums import Confidence
+from app.domain.enums import Confidence, Currency
 from app.services.floors import (
     exact_variant_floor,
     gift_floor,
@@ -50,6 +50,13 @@ def test_floors_ignore_inactive(listings):
         l.is_active = False
     f = gift_floor(listings[0], listings)
     assert f.value is None
+
+
+def test_floor_does_not_mix_ton_and_usdt(listings):
+    listings[1].currency = Currency.USDT
+    f = model_floor(listings[0], listings)
+    assert f.value == Decimal("4.8")
+    assert f.listings_count == 1
 
 
 def test_global_floor_requires_ton_normalization(listings):

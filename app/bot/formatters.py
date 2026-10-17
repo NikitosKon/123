@@ -1,8 +1,11 @@
 """Форматирование текстовых уведомлений бота."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
+from decimal import Decimal
 from html import escape
+from urllib.parse import quote
 
 from app.domain.models import DealAnalysis, FloorQuote, NormalizedListing
 
@@ -21,49 +24,75 @@ def human_age(dt: datetime) -> str:
 def fmt_floor(f: FloorQuote | None, label: str, emoji: str) -> str:
     if f is None or f.value is None:
         return f"{emoji} {label}: —"
-    conf = " ⚠️ low confidence" if f.listings_count == 1 else ""
+    conf = " ⚠️ мало данных" if f.listings_count == 1 else ""
     mp = f" ({f.marketplace.value})" if f.marketplace else ""
-    return f"{emoji} {label}: {f.value} {f.currency.value}{mp}{conf}"
+    return f"{emoji} {label}: {fmt_amount(f.value)} {f.currency.value}{mp}{conf}"
+
+
+def fmt_amount(value: Decimal) -> str:
+    """Format Decimal without redundant trailing zeroes."""
+    return format(value.normalize(), "f")
+
+
+def telegram_gift_url(listing: NormalizedListing) -> str:
+    """Вернуть deep link на коллекционный подарок Telegram, если известен номер."""
+    raw = listing.raw if isinstance(listing.raw, dict) else {}
+    slug = next(
+        (raw.get(key) for key in ("telegram_slug", "gift_slug", "slug") if raw.get(key)),
+        None,
+    )
+    if slug:
+        slug = str(slug).strip().rstrip("/").split("/")[-1]
+    elif listing.gift_num is not None:
+        # Telegram collectible links conventionally use CamelCaseGiftName-number.
+        words = re.findall(r"[A-Za-z0-9]+", listing.gift_name)
+        if not words:
+            return ""
+        slug = "".join(word[:1].upper() + word[1:] for word in words)
+        slug = f"{slug}-{listing.gift_num}"
+    else:
+        return ""
+
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", slug):
+        return ""
+    return f"https://t.me/nft/{quote(slug, safe='-_')}"
 
 
 def format_deal(deal: DealAnalysis) -> str:
     l: NormalizedListing = deal.listing
+    transfer = (
+        "✅ доступна" if l.transferable is True
+        else "⛔ заблокирована" if l.transferable is False
+        else "❔ неизвестно"
+    )
+    name = escape(l.gift_name)
     lines = [
-        "🟢 <b>NEW DEAL</b>",
+        f"🎁 <b>{name}{f' #{l.gift_num}' if l.gift_num is not None else ''}</b>",
         "",
-        f"🎁 Gift: {l.gift_name}" + (f" #{l.gift_num}" if l.gift_num else ""),
-        f"🧩 Model: {l.model}" + (f" ({l.model_rarity_pct}%)" if l.model_rarity_pct else ""),
-        f"🎨 Backdrop: {l.backdrop}" + (f" ({l.backdrop_rarity_pct}%)" if l.backdrop_rarity_pct else ""),
-        f"🔹 Symbol: {l.symbol}" + (f" ({l.symbol_rarity_pct}%)" if l.symbol_rarity_pct else ""),
-    ]
-    if l.gift_num:
-        lines.append(f"🔢 Number: #{l.gift_num}")
-    lines += [
+        f"🛹 Model: {escape(l.model)}" + (f" ({l.model_rarity_pct}%)" if l.model_rarity_pct is not None else ""),
+        f"🔵 Backdrop: {escape(l.backdrop)}" + (f" ({l.backdrop_rarity_pct}%)" if l.backdrop_rarity_pct is not None else ""),
+        f"🦁 Symbol: {escape(l.symbol)}" + (f" ({l.symbol_rarity_pct}%)" if l.symbol_rarity_pct is not None else ""),
         "",
-        f"💰 Купить:\n{deal.buy_price} {l.currency.value} на {deal.buy_marketplace.value}",
+        f"💎 Цена: {fmt_amount(deal.buy_price)} {l.currency.value} ({l.marketplace.value})",
+        f"🔒 Передача: {transfer}",
     ]
-    if deal.sell_price is not None:
-        mp = deal.sell_marketplace.value if deal.sell_marketplace else "—"
-        lines.append(f"\n📈 Продать:\n{deal.sell_price} {l.currency.value} на {mp}")
-    lines.append("")
-    lines.append(fmt_floor(deal.gift_floor, "Gift floor", "💎"))
-    lines.append(fmt_floor(deal.model_floor, "Model floor", "🧩"))
-    lines.append(fmt_floor(deal.exact_variant_floor, "Exact variant floor", "🎨"))
-    lines.append("")
-    lines.append(f"💸 Все расходы: {deal.total_costs} {l.currency.value}")
+
     if deal.net_profit is not None:
-        sign = "+" if deal.net_profit >= 0 else ""
-        lines.append(f"✅ Net profit: {sign}{deal.net_profit} {l.currency.value} ({deal.status})")
-    if deal.roi_percent is not None:
-        sign = "+" if deal.roi_percent >= 0 else ""
-        lines.append(f"📊 ROI: {sign}{deal.roi_percent}%")
+        profit = f"+{fmt_amount(deal.net_profit)}" if deal.net_profit >= 0 else fmt_amount(deal.net_profit)
+        lines += ["", f"💰 Потенциальный профит: ≈ {profit} {l.currency.value}"]
+    else:
+        lines += ["", "💰 Потенциальный профит: —"]
+
     lines += [
-        "",
-        f"🟡 Confidence: {deal.confidence.value}",
-        f"🕒 Обновлено: {human_age(deal.updated_at)}",
+        fmt_floor(deal.gift_floor, "Флор подарка", "🎁"),
+        fmt_floor(deal.model_floor, "Флор модели", "🛹"),
     ]
-    if l.url:
-        lines += ["", f'<a href="{escape(l.url, quote=True)}">🔗 Открыть подарок на маркетплейсе</a>']
+
+    gift_url = telegram_gift_url(l)
+    if gift_url:
+        lines += ["", f'<a href="{escape(gift_url, quote=True)}">🔗 Открыть подарок в Telegram</a>']
+    elif l.url:
+        lines += ["", f'<a href="{escape(l.url, quote=True)}">🔗 Открыть листинг на {escape(l.marketplace.value)}</a>']
     return "\n".join(lines)
 
 

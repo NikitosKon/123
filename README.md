@@ -9,6 +9,8 @@ Telegram-бот-агрегатор коллекционных подарков T
 - 4 типа floor: **gift / model / exact variant / global** (с confidence и возрастом данных)
 - Расчёт net profit и ROI с учётом всех комиссий (buy/sell fee, deposit, withdrawal, transfer, network, slippage)
 - Дедупликация по fingerprint `marketplace + listing_id + price + variant` + cooldown
+- Автоматические уведомления только по активным листингам, прошедшим пороги прибыли и ROI; проверка работает в фоне с настраиваемым интервалом
+- Карточка сделки показывает цену, передачу, потенциальную прибыль, флоры подарка и модели, а также ссылку на коллекционный подарок в Telegram
 - Визуальная карточка уведомления (Pillow) в тёмном Telegram-стиле по референсу
 - Режим уведомлений `NOTIFICATION_MODE=link` по умолчанию: текст, прямая ссылка и inline-кнопки без PNG-карточки; `card` включает визуальную карточку
 - **Только оригинальные изображения подарков**: Fragment NFT CDN → Bot API `getCustomEmojiStickers` → TON metadata. Никаких AI/случайных картинок.
@@ -20,26 +22,17 @@ Telegram-бот-агрегатор коллекционных подарков T
 ## Быстрый старт
 
 ```bash
-# Создай локальный .env с BOT_TOKEN, ADMIN_IDS, DATABASE_URL и REDIS_URL; не коммить его
+cp .env.example .env   # BOT_TOKEN, ADMIN_IDS и при необходимости authData
 docker compose up -d --build
 ```
 
 Проверка: `curl localhost:8080/health`
 
-Чтобы подключить Getgems, получи Read API key через TON Connect на [getgems.io/public-api](https://getgems.io/public-api), затем добавь в Variables на Infrlo:
-
-```env
-ENABLE_GETGEMS=true
-GETGEMS_API_KEY=твой_ключ
-```
-
-Сохрани переменные и перезапусти сервис. Ключ храни только в Variables хостинга, не в GitHub. Доступ Getgems стоит 10 GRAM в месяц.
-
 ## Локальный запуск без Docker
 
 ```bash
 pip install -r requirements.txt
-# Создай локальный .env с BOT_TOKEN, DATABASE_URL и REDIS_URL; не коммить его
+cp .env.example .env   # BOT_TOKEN, DATABASE_URL
 alembic upgrade head
 python -m app.main
 ```
@@ -62,7 +55,7 @@ python scripts/demo_card.py   # -> card_preview.png
 - **Tonnel** — единственный источник с публичным чтением листингов без авторизации. Cloudflare блочит datacenter IP → нужен residential IP/proxy или запуск с домашней машины. Комиссия покупателя +10% (цены в API — raw, без наценки).
 - **Fragment** — нет публичного API листингов. Используется только NFT-metadata CDN (оригинальные изображения/атрибуты).
 - **Portals** — нужен `PORTALS_AUTH_DATA` (initData mini-app). Без него адаптер `not_configured`.
-- **Getgems** — официальный Read API для листингов Telegram Gifts; требуется `GETGEMS_API_KEY`. Ключ оформляется через TON Connect на [getgems.io/public-api](https://getgems.io/public-api); доступ стоит 10 GRAM в месяц.
+- **Getgems** — GraphQL публичный, но CloudFront блочит datacenter IP.
 - **MRKT / Telegram native** — публичного API нет, адаптеры `disabled` с причинами.
 - Прибыль всегда подписана `estimated`, если нет исполнимых buy orders.
 - `MAX_LISTING_AGE_SECONDS=600` означает, что алерт отправляется только для листингов младше десяти минут. Это окно защищает от пропусков при кратковременном сбое сети; повторные уведомления сдерживает dedup.
@@ -72,10 +65,10 @@ python scripts/demo_card.py   # -> card_preview.png
 
 ## Для production нужно добавить
 
-- API key для Getgems (`GETGEMS_API_KEY`); Tonnel может требовать residential IP/proxy, если Infrlo блокируется Cloudflare
+- Residential proxy pool для Tonnel/Getgems (или запуск с residential IP)
 - authData/токены для Portals/Thermos (ротация, TTL initData)
 - Redis-backed dedup (сейчас in-memory) и per-user rate limiting
-- Персистентные user filters через `/settings` (сейчас читаются из настроек по умолчанию)
+- Персистентные user filters через `/settings` (сейчас читаются из .env-дефолтов)
 - Курс TON/USD провайдер (`TON_PRICE_PROVIDER`) для нормализации USD/USDT
 - Алерты на падение источников (Telegram admin), Prometheus-метрики
 - Webhook-режим бота вместо polling

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.domain.enums import Confidence
+from app.domain.enums import Confidence, Currency
 from app.domain.models import FloorQuote, NormalizedListing
 
 
@@ -30,9 +30,20 @@ def _quote(kind: str, pool: list[NormalizedListing]) -> FloorQuote:
     )
 
 
+def _comparable_currency(target: NormalizedListing, listing: NormalizedListing) -> bool:
+    ton_currencies = {Currency.TON, Currency.GRAM}
+    if target.currency in ton_currencies:
+        return listing.currency in ton_currencies
+    return target.currency == listing.currency
+
+
 def gift_floor(target: NormalizedListing, all_listings: list[NormalizedListing]) -> FloorQuote:
     """Минимальная цена среди всех вариантов того же базового подарка."""
-    pool = [l for l in all_listings if l.gift_name.lower() == target.gift_name.lower()]
+    pool = [
+        l for l in all_listings
+        if l.gift_name.casefold() == target.gift_name.casefold()
+        and _comparable_currency(target, l)
+    ]
     return _quote("gift_floor", pool)
 
 
@@ -41,8 +52,9 @@ def model_floor(target: NormalizedListing, all_listings: list[NormalizedListing]
     pool = [
         l
         for l in all_listings
-        if l.gift_name.lower() == target.gift_name.lower()
-        and l.model.lower() == target.model.lower()
+        if l.gift_name.casefold() == target.gift_name.casefold()
+        and l.model.casefold() == target.model.casefold()
+        and _comparable_currency(target, l)
     ]
     return _quote("model_floor", pool)
 
@@ -51,11 +63,9 @@ def exact_variant_floor(
     target: NormalizedListing, all_listings: list[NormalizedListing]
 ) -> FloorQuote:
     """Минимальная цена точного варианта (gift + model + backdrop + symbol)."""
-    pool = [
-        l
-        for l in all_listings
-        if l.variant_fingerprint == target.variant_fingerprint
-    ]
+    pool = [l for l in all_listings
+            if l.variant_fingerprint == target.variant_fingerprint
+            and _comparable_currency(target, l)]
     return _quote("exact_variant_floor", pool)
 
 
