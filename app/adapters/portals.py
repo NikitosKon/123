@@ -1,4 +1,4 @@
-"""Portals adapter — https://portals-market.com (Telegram mini-app).
+"""Portals adapter — https://portal-market.com (Telegram mini-app).
 
 Публичного неавторизованного API нет: чтение листингов требует authData
 (initData из mini-app). Адаптер реализован; без PORTALS_AUTH_DATA — not_configured.
@@ -20,7 +20,7 @@ from app.domain.models import NormalizedListing
 
 log = logging.getLogger(__name__)
 
-API = "https://portals-market.com/api"
+API = "https://portal-market.com/api"
 
 
 class PortalsAdapter(MarketplaceAdapter):
