@@ -28,6 +28,8 @@ class CollectorWorker:
         interval = c.settings.poll_interval_seconds
         max_age = timedelta(seconds=c.settings.max_listing_age_seconds)
         log.info("collector started, interval=%ss", interval)
+        if not self.notify_chat_ids:
+            log.warning("collector has no notification recipients; set ADMIN_IDS in .env")
         while not self._stop.is_set():
             for adapter in c.adapters:
                 if adapter.status != SourceStatus.LIVE:
@@ -46,16 +48,31 @@ class CollectorWorker:
 
     async def _process_adapter(self, adapter, max_age: timedelta) -> None:
         c = ctx()
-        listings = await adapter.fetch_new_listings()
+        now = datetime.now(timezone.utc)
+        listings = await adapter.fetch_new_listings(since=now - max_age)
         if not listings:
+            log.info("%s scan: fetched=0", adapter.marketplace.value)
             return
+
+        stats = {
+            "fetched": len(listings),
+            "fresh": 0,
+            "not_active": 0,
+            "stale": 0,
+            "not_profitable": 0,
+            "duplicates": 0,
+            "sent": 0,
+        }
 
         # активные листинги того же подарка для floor (из того же источника)
         for l in listings:
             if not l.is_active:
+                stats["not_active"] += 1
                 continue
             if l.listed_at and datetime.now(timezone.utc) - l.listed_at > max_age:
+                stats["stale"] += 1
                 continue  # протухший листинг
+            stats["fresh"] += 1
 
             pool = await adapter.fetch_active_listings(gift_name=l.gift_name, limit=30)
             gf = gift_floor(l, pool)
@@ -86,19 +103,36 @@ class CollectorWorker:
                 min_profit_ton=Decimal(str(c.settings.default_min_profit_ton)),
                 min_roi=Decimal(str(c.settings.default_min_roi)),
             ):
+                stats["not_profitable"] += 1
                 continue
             if c.dedup.is_duplicate(l):
+                stats["duplicates"] += 1
                 continue
 
-            card_path = Path(c.settings.card_cache_dir) / f"deal_{l.marketplace.value}_{l.listing_id}.png"
-            try:
-                card = await build_card_for_deal(deal, card_path)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("card render failed: %s", exc)
-                card = None
+            card = None
+            if c.settings.notification_mode.lower() == "card":
+                card_path = Path(c.settings.card_cache_dir) / f"deal_{l.marketplace.value}_{l.listing_id}.png"
+                try:
+                    card = await build_card_for_deal(deal, card_path)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("card render failed: %s", exc)
 
             for chat_id in self.notify_chat_ids:
                 try:
                     await send_deal_card(self.bot, chat_id, deal, card)
+                    stats["sent"] += 1
                 except Exception as exc:  # noqa: BLE001
                     log.error("notify %s failed: %s", chat_id, exc)
+
+        log.info(
+            "%s scan: fetched=%d fresh=%d not_active=%d stale=%d "
+            "not_profitable=%d duplicates=%d sent=%d",
+            adapter.marketplace.value,
+            stats["fetched"],
+            stats["fresh"],
+            stats["not_active"],
+            stats["stale"],
+            stats["not_profitable"],
+            stats["duplicates"],
+            stats["sent"],
+        )

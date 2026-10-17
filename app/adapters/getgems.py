@@ -6,6 +6,7 @@ Fee по Telegram gifts ~2%.
 """
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime
 from decimal import Decimal
@@ -16,6 +17,8 @@ import httpx
 from app.adapters.base import MarketplaceAdapter, parse_dt, to_decimal, utcnow
 from app.domain.enums import Currency, Marketplace, SourceStatus
 from app.domain.models import NormalizedListing
+
+log = logging.getLogger(__name__)
 
 GQL = "https://api.getgems.io/graphql"
 
@@ -56,8 +59,8 @@ class GetgemsAdapter(MarketplaceAdapter):
     async def health_check(self) -> SourceStatus:
         try:
             await self._query("{ __typename }", {})
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — health endpoint не должен падать
+            log.debug("Getgems health check failed: %s", exc)
         return self.status
 
     async def fetch_new_listings(self, since: datetime | None = None) -> list[NormalizedListing]:

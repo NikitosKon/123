@@ -62,7 +62,8 @@ def setup_dispatcher(settings: Settings) -> Dispatcher:
 
 
 def ctx() -> BotContext:
-    assert _ctx is not None
+    if _ctx is None:
+        raise RuntimeError("Bot context is not initialized; call setup_dispatcher first")
     return _ctx
 
 
@@ -139,9 +140,10 @@ async def cmd_gift(m: Message) -> None:
 
 @router.message(Command("deals", "top"))
 async def cmd_deals(m: Message) -> None:
+    mode = "ссылкой" if ctx().settings.notification_mode == "link" else "PNG-карточкой и ссылкой"
     await m.answer(
         "Сбор deals идёт в фоне каждые "
-        f"{ctx().settings.poll_interval_seconds} c. При выгодной сделке пришлю карточку автоматически."
+        f"{ctx().settings.poll_interval_seconds} c. При выгодной сделке пришлю уведомление с {mode}."
     )
 
 
@@ -189,7 +191,7 @@ async def cb_hist(c: CallbackQuery) -> None:
 
 
 async def send_deal_card(bot: Bot, chat_id: int, deal, card_path=None) -> None:
-    """Отправка уведомления: карточка (если есть) + текст + кнопки."""
+    """Отправка уведомления: PNG-карточка опционально, ссылка всегда."""
     from aiogram.types import FSInputFile
 
     if card_path:

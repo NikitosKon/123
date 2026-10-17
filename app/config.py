@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,12 +14,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://user:password@postgres:5432/gifts"
     redis_url: str = "redis://redis:6379/0"
     admin_ids: str = ""
-    port: int = Field(default=8080, ge=1, le=65535)
 
     poll_interval_seconds: int = 15
     default_min_profit_ton: float = 0.2
     default_min_roi: float = 10.0
-    max_listing_age_seconds: int = 120
+    max_listing_age_seconds: int = 600
     ton_price_provider: str = ""
     ton_usd_rate_cache_seconds: int = 60
 
@@ -40,17 +39,25 @@ class Settings(BaseSettings):
     network_fee_ton: float = 0.05
     telegram_transfer_fee_ton: float = 0.03
 
-    card_font_path: str = "assets/fonts/Inter-Regular.ttf"
+    card_font_path: str = "assets/fonts/Inter.ttf"
     card_font_bold_path: str = "assets/fonts/Inter-Bold.ttf"
     card_cache_dir: str = ".cache/cards"
     image_cache_dir: str = ".cache/images"
+    # link = text + direct marketplace link; card = visual PNG + text.
+    notification_mode: Literal["link", "card"] = "link"
 
     http_timeout_seconds: float = 20.0
     http_max_retries: int = 3
 
     @property
     def admin_id_list(self) -> list[int]:
-        return [int(x) for x in self.admin_ids.split(",") if x.strip().isdigit()]
+        result: list[int] = []
+        for raw_id in self.admin_ids.split(","):
+            try:
+                result.append(int(raw_id.strip()))
+            except ValueError:
+                continue
+        return result
 
 
 @lru_cache

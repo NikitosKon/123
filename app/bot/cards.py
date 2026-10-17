@@ -4,12 +4,13 @@
 """
 from __future__ import annotations
 
+import logging
 import math
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -32,6 +33,7 @@ EMOJI_FONT_PATHS = [
     "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
 ]
 EMOJI_SIZE = 109  # NotoColorEmoji рендерится только в 109px
+log = logging.getLogger(__name__)
 
 
 def _is_emoji(ch: str) -> bool:
@@ -84,7 +86,7 @@ def _emoji_bitmap(g: str, target_px: int) -> Image.Image | None:
                     img = img.crop(bbox)
                 ratio = target_px / img.height
                 return img.resize(
-                    (max(1, int(img.width * ratio)), target_px), Image.LANCZOS
+                    (max(1, int(img.width * ratio)), target_px), Image.Resampling.LANCZOS
                 )
             except Exception:  # noqa: BLE001,S112
                 continue
@@ -135,7 +137,7 @@ def _doodle_bg(w: int, h: int, seed: int = 42) -> Image.Image:
     """Размытый декоративный фон с элементами Telegram Gifts."""
     img = Image.new("RGB", (w, h), BG)
     d = ImageDraw.Draw(img)
-    rnd = random.Random(seed)
+    rnd = random.Random(seed)  # noqa: S311 — декоративный детерминированный фон
     for _ in range(46):
         x, y = rnd.randint(0, w), rnd.randint(0, h)
         s = rnd.randint(18, 46)
@@ -199,7 +201,6 @@ def render_card(data: CardData, out_path: Path, *, fonts_dir: str = "assets/font
     F = lambda name, size: ImageFont.truetype(str(fonts_dir_p / name), size)  # noqa: E731
 
     f_title = F("Inter-Bold.ttf", 42)
-    f_bold = F("Inter-Bold.ttf", 32)
     f_semi = F("Inter-SemiBold.ttf", 32)
     f_reg = F("Inter-Regular.ttf", 32)
     f_small = F("Inter-Regular.ttf", 28)
@@ -217,7 +218,6 @@ def render_card(data: CardData, out_path: Path, *, fonts_dir: str = "assets/font
     def seg_line(segs):
         return text_width(dd, segs)
 
-    lines_h = 0
     line_gap = 16
 
     rows: list[tuple[str, list]] = []
@@ -328,7 +328,7 @@ def render_card(data: CardData, out_path: Path, *, fonts_dir: str = "assets/font
     pw, ph = px1 - px0, img_panel_h
     _rounded(d, [px0, y, px1, y + ph], 22, PANEL)
     # декоративные точки (как у фона подарка)
-    rnd = random.Random(data.gift_num)
+    rnd = random.Random(data.gift_num)  # noqa: S311 — декоративный детерминированный фон
     for _ in range(14):
         dx = rnd.randint(px0 + 10, px1 - 30)
         dy = rnd.randint(y + 10, y + ph - 30)
@@ -341,7 +341,7 @@ def render_card(data: CardData, out_path: Path, *, fonts_dir: str = "assets/font
             # cover: заполняем всю панель с центрированием и скруглением
             ratio = max(pw / gift.width, ph / gift.height)
             gw, gh = int(gift.width * ratio), int(gift.height * ratio)
-            gift = gift.resize((gw, gh), Image.LANCZOS)
+            gift = gift.resize((gw, gh), Image.Resampling.LANCZOS)
             crop = gift.crop(((gw - pw) // 2, (gh - ph) // 2, (gw + pw) // 2, (gh + ph) // 2))
             mask = Image.new("L", (pw, ph), 0)
             ImageDraw.Draw(mask).rounded_rectangle([0, 0, pw, ph], radius=22, fill=255)
@@ -352,8 +352,8 @@ def render_card(data: CardData, out_path: Path, *, fonts_dir: str = "assets/font
             for i in range(96):
                 sd.line([(0, i), (pw, i)], fill=(10, 16, 24, int(150 * (1 - i / 96))))
             img.paste(strip, (px0, y), strip)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.debug("card image could not be rendered: %s", exc)
     d.text((px0 + 22, y + 16), "Telegram", font=f_mag, fill=MAGENTA)
     d.text((px0 + 22, y + 50), f"{data.gift_name} #{data.gift_num}", font=f_semi, fill=WHITE)
     y += ph
@@ -374,8 +374,8 @@ def render_card(data: CardData, out_path: Path, *, fonts_dir: str = "assets/font
         bx = 24
         for label in row:
             _rounded(d, [bx, by, bx + bw, by + 68], 20, BTN)
-            tw = dd.textlength(label, font=f_btn)
-            d.text((bx + (bw - tw) / 2, by + 18), label, font=f_btn, fill=BLUE)
+            text_width_px = dd.textlength(label, font=f_btn)
+            d.text((bx + (bw - text_width_px) / 2, by + 18), label, font=f_btn, fill=BLUE)
             bx += bw + bw_gap
         by += 68 + 12
 

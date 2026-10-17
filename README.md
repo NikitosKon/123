@@ -10,6 +10,7 @@ Telegram-бот-агрегатор коллекционных подарков T
 - Расчёт net profit и ROI с учётом всех комиссий (buy/sell fee, deposit, withdrawal, transfer, network, slippage)
 - Дедупликация по fingerprint `marketplace + listing_id + price + variant` + cooldown
 - Визуальная карточка уведомления (Pillow) в тёмном Telegram-стиле по референсу
+- Режим уведомлений `NOTIFICATION_MODE=link` по умолчанию: текст, прямая ссылка и inline-кнопки без PNG-карточки; `card` включает визуальную карточку
 - **Только оригинальные изображения подарков**: Fragment NFT CDN → Bot API `getCustomEmojiStickers` → TON metadata. Никаких AI/случайных картинок.
 - Команды: `/start /latest /deals /top /gift /watchlist /filters /markets /history /settings /help`
 - Inline-кнопки: Открыть подарок / Купить / История цен / В избранное / Скрыть похожие
@@ -19,11 +20,11 @@ Telegram-бот-агрегатор коллекционных подарков T
 ## Быстрый старт
 
 ```bash
-cp .env.example .env   # заполнить BOT_TOKEN
+cp .env.example .env   # BOT_TOKEN, ADMIN_IDS и при необходимости authData
 docker compose up -d --build
 ```
 
-Проверка: `curl localhost:${PORT:-8080}/health`
+Проверка: `curl localhost:8080/health`
 
 ## Локальный запуск без Docker
 
@@ -37,7 +38,7 @@ python -m app.main
 ## Тесты
 
 ```bash
-pip install pytest pytest-asyncio aiosqlite
+pip install -r requirements-dev.txt
 pytest -q
 ```
 
@@ -47,12 +48,6 @@ pytest -q
 python scripts/demo_card.py   # -> card_preview.png
 ```
 
-## Размещение на хостинге
-
-Приложение работает как постоянно запущенный Docker-сервис: бот использует Telegram long polling и одновременно отдаёт health endpoint `/health`. На хостинге укажите Dockerfile из корня репозитория и сохраните процесс работающим постоянно; приложение слушает `0.0.0.0:$PORT` (по умолчанию `8080`). Секреты `BOT_TOKEN`, `ADMIN_IDS` и данные авторизации маркетплейсов задавайте только в защищённых переменных окружения хостинга, не в репозитории. После запуска откройте бота в Telegram и отправьте `/start`.
-
-По умолчанию все источники выключены. Перед включением проверьте требования в [матрице интеграций](MARKETPLACE_INTEGRATION_MATRIX.md): некоторым источникам нужны токены, авторизация или подходящий IP.
-
 ## Что важно знать (честные ограничения)
 
 - **Tonnel** — единственный источник с публичным чтением листингов без авторизации. Cloudflare блочит datacenter IP → нужен residential IP/proxy или запуск с домашней машины. Комиссия покупателя +10% (цены в API — raw, без наценки).
@@ -61,6 +56,8 @@ python scripts/demo_card.py   # -> card_preview.png
 - **Getgems** — GraphQL публичный, но CloudFront блочит datacenter IP.
 - **MRKT / Telegram native** — публичного API нет, адаптеры `disabled` с причинами.
 - Прибыль всегда подписана `estimated`, если нет исполнимых buy orders.
+- `MAX_LISTING_AGE_SECONDS=600` означает, что алерт отправляется только для листингов младше десяти минут. Это окно защищает от пропусков при кратковременном сбое сети; повторные уведомления сдерживает dedup.
+- `/deals` пока является информационной командой и не выводит сохранённую историю сделок; историю нужно подключить к репозиторию/БД отдельно.
 - Telegram Stars не конвертируются автоматически (нет надёжного курса) — показываются отдельно.
 - TON ≡ GRAM (ребрендинг 2026), отображение валюты зависит от исходного маркетплейса.
 

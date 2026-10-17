@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from html import escape
 
 from app.domain.models import DealAnalysis, FloorQuote, NormalizedListing
 
@@ -61,6 +62,8 @@ def format_deal(deal: DealAnalysis) -> str:
         f"🟡 Confidence: {deal.confidence.value}",
         f"🕒 Обновлено: {human_age(deal.updated_at)}",
     ]
+    if l.url:
+        lines += ["", f'<a href="{escape(l.url, quote=True)}">🔗 Открыть подарок на маркетплейсе</a>']
     return "\n".join(lines)
 
 

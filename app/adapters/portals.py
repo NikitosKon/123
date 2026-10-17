@@ -6,6 +6,7 @@ Fee ~6–7%.
 """
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime
 from decimal import Decimal
@@ -13,9 +14,11 @@ from typing import Any
 
 import httpx
 
-from app.adapters.base import MarketplaceAdapter, to_decimal, utcnow
+from app.adapters.base import MarketplaceAdapter, to_decimal
 from app.domain.enums import Currency, Marketplace, SourceStatus
 from app.domain.models import NormalizedListing
+
+log = logging.getLogger(__name__)
 
 API = "https://portals-market.com/api"
 
@@ -58,8 +61,8 @@ class PortalsAdapter(MarketplaceAdapter):
             return self.status
         try:
             await self._get("/nfts/search", {"limit": 1, "offset": 0})
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — health endpoint не должен падать
+            log.debug("Portals health check failed: %s", exc)
         return self.status
 
     async def fetch_new_listings(self, since: datetime | None = None) -> list[NormalizedListing]:

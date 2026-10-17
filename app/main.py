@@ -6,8 +6,8 @@ import logging
 
 import uvicorn
 from aiogram import Bot
-from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 from app.bot.handlers import setup_dispatcher
 from app.config import get_settings
@@ -32,7 +32,7 @@ async def amain() -> None:
 
     from app.api.health import app as api_app
 
-    api = uvicorn.Server(uvicorn.Config(api_app, host="0.0.0.0", port=settings.port, log_level="warning"))
+    api = uvicorn.Server(uvicorn.Config(api_app, host="0.0.0.0", port=8080, log_level="warning"))
 
     log.info("starting: bot polling + collector + :8080/health")
     await asyncio.gather(

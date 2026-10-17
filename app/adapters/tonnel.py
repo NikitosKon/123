@@ -11,19 +11,22 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import time
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from curl_cffi import requests as creq  # type: ignore
 from Crypto.Cipher import AES  # type: ignore
 from Crypto.Random import get_random_bytes  # type: ignore
 from Crypto.Util.Padding import pad  # type: ignore
+from curl_cffi import requests as creq  # type: ignore
 
-from app.adapters.base import MarketplaceAdapter, parse_dt, to_decimal, utcnow
+from app.adapters.base import MarketplaceAdapter, parse_dt, to_decimal
 from app.domain.enums import Currency, Marketplace, SourceStatus
 from app.domain.models import NormalizedListing
+
+log = logging.getLogger(__name__)
 
 API = "https://gifts2.tonnel.network/api"
 _WTF_PASSWORD = b"yowtfisthispieceofshitiiit"  # из JS-бандла официального клиента
@@ -101,7 +104,8 @@ class TonnelAdapter(MarketplaceAdapter):
         try:
             await self._post("/pageGifts", self._gifts_payload(limit=1))
             return self.status
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — health endpoint не должен падать
+            log.debug("Tonnel health check failed: %s", exc)
             return self.status
 
     def _gifts_payload(

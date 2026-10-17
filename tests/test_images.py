@@ -5,9 +5,15 @@ from app.services.images import GiftImageService
 
 
 @pytest.mark.asyncio
-async def test_no_sources_returns_none(tmp_path):
+async def test_no_sources_returns_none(tmp_path, monkeypatch):
     svc = GiftImageService(bot_token="", tonapi_key="", cache_dir=str(tmp_path))
-    # Fragment CDN вернёт 404 для несуществующего подарка; остальные источники не настроены
+
+    async def no_fragment(*_args, **_kwargs):
+        return None
+
+    # Это unit-тест: отсутствие источников не должно зависеть от сети,
+    # прокси или доступности Fragment CDN.
+    monkeypatch.setattr(svc, "from_fragment", no_fragment)
     got = await svc.resolve(gift_name="No Such Gift Xyz", num=999999999)
     assert got is None
 

@@ -7,7 +7,7 @@ roi_percent   = net_profit / entry_cost * 100
 """
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.domain.enums import Confidence
 from app.domain.models import DealAnalysis, FloorQuote, NormalizedListing

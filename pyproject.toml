@@ -10,6 +10,17 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "S", "BLE", "ARG"]
+ignore = [
+    "ARG002",  # abstract adapter methods keep the public keyword-based interface
+    "E501",    # Telegram copy and API payloads are intentionally readable as one line
+    "E741",    # `l` is conventional for normalized listing comprehensions
+    "S104",    # the health API must be reachable from the container network
+    "S311",    # card backgrounds use deterministic, non-security randomness
+    "UP017",   # timezone.utc remains compatible with supported runtime integrations
+    "UP035",   # typing imports are kept compatible with the project style
+    "UP041",   # asyncio.TimeoutError is explicit at the async boundary
+    "UP042",   # str enums are part of the public JSON/Pydantic contract
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]

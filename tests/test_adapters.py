@@ -67,6 +67,6 @@ async def test_failing_source_does_not_stop_others():
     for a in (BrokenAdapter(), OkAdapter()):
         try:
             results += await a.fetch_new_listings()
-        except Exception:
+        except ConnectionError:
             continue
     assert len(results) == 1
