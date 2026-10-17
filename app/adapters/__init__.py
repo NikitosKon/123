@@ -15,7 +15,7 @@ def build_adapters(settings: Settings) -> list[MarketplaceAdapter]:
     return [
         TelegramNativeAdapter(enabled=settings.enable_telegram_native),
         FragmentAdapter(enabled=settings.enable_fragment),
-        GetgemsAdapter(enabled=settings.enable_getgems),
+        GetgemsAdapter(api_key=settings.getgems_api_key, enabled=settings.enable_getgems),
         PortalsAdapter(auth_data=settings.portals_auth_data, enabled=settings.enable_portals),
         TonnelAdapter(auth_data=settings.tonnel_auth_data, enabled=settings.enable_tonnel),
         MrktAdapter(enabled=settings.enable_mrkt),

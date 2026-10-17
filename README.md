@@ -26,6 +26,15 @@ docker compose up -d --build
 
 Проверка: `curl localhost:8080/health`
 
+Чтобы подключить Getgems, получи Read API key через TON Connect на [getgems.io/public-api](https://getgems.io/public-api), затем добавь в Variables на Infrlo:
+
+```env
+ENABLE_GETGEMS=true
+GETGEMS_API_KEY=твой_ключ
+```
+
+Сохрани переменные и перезапусти сервис. Ключ храни только в Variables хостинга, не в GitHub. Доступ Getgems стоит 10 GRAM в месяц.
+
 ## Локальный запуск без Docker
 
 ```bash
@@ -53,7 +62,7 @@ python scripts/demo_card.py   # -> card_preview.png
 - **Tonnel** — единственный источник с публичным чтением листингов без авторизации. Cloudflare блочит datacenter IP → нужен residential IP/proxy или запуск с домашней машины. Комиссия покупателя +10% (цены в API — raw, без наценки).
 - **Fragment** — нет публичного API листингов. Используется только NFT-metadata CDN (оригинальные изображения/атрибуты).
 - **Portals** — нужен `PORTALS_AUTH_DATA` (initData mini-app). Без него адаптер `not_configured`.
-- **Getgems** — GraphQL публичный, но CloudFront блочит datacenter IP.
+- **Getgems** — официальный Read API для листингов Telegram Gifts; требуется `GETGEMS_API_KEY`. Ключ оформляется через TON Connect на [getgems.io/public-api](https://getgems.io/public-api); доступ стоит 10 GRAM в месяц.
 - **MRKT / Telegram native** — публичного API нет, адаптеры `disabled` с причинами.
 - Прибыль всегда подписана `estimated`, если нет исполнимых buy orders.
 - `MAX_LISTING_AGE_SECONDS=600` означает, что алерт отправляется только для листингов младше десяти минут. Это окно защищает от пропусков при кратковременном сбое сети; повторные уведомления сдерживает dedup.
@@ -63,7 +72,7 @@ python scripts/demo_card.py   # -> card_preview.png
 
 ## Для production нужно добавить
 
-- Residential proxy pool для Tonnel/Getgems (или запуск с residential IP)
+- API key для Getgems (`GETGEMS_API_KEY`); Tonnel может требовать residential IP/proxy, если Infrlo блокируется Cloudflare
 - authData/токены для Portals/Thermos (ротация, TTL initData)
 - Redis-backed dedup (сейчас in-memory) и per-user rate limiting
 - Персистентные user filters через `/settings` (сейчас читаются из .env-дефолтов)

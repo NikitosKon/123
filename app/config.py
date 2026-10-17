@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     enable_telegram_native: bool = False
     enable_fragment: bool = False
     enable_getgems: bool = False
+    getgems_api_key: str = ""
     enable_portals: bool = False
     enable_tonnel: bool = False
     enable_mrkt: bool = False
