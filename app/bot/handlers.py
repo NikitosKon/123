@@ -23,7 +23,7 @@ router = Router()
 
 HELP = (
     "🤖 <b>Gift Deals Aggregator</b>\n\n"
-    "/latest — последние листинги\n"
+    "/latest — вручную показать до 5 последних листингов (без фильтра прибыли)\n"
     "/deals — выгодные предложения\n"
     "/top — топ по ROI\n"
     "/gift &lt;название&gt; — поиск подарка\n"
@@ -142,8 +142,9 @@ async def cmd_gift(m: Message) -> None:
 async def cmd_deals(m: Message) -> None:
     mode = "ссылкой" if ctx().settings.notification_mode == "link" else "PNG-карточкой и ссылкой"
     await m.answer(
-        "Сбор deals идёт в фоне каждые "
-        f"{ctx().settings.poll_interval_seconds} c. При выгодной сделке пришлю уведомление с {mode}."
+        "Бот автоматически проверяет новые листинги каждые "
+        f"{ctx().settings.poll_interval_seconds} с и пришлёт уведомление с {mode}, "
+        "если найдёт выгодный вариант. /latest — только ручной просмотр новых листингов."
     )
 
 

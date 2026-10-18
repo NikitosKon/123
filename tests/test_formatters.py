@@ -19,6 +19,7 @@ def test_deal_message_contains_direct_marketplace_link():
         listing,
         buy_fee_pct=Decimal("0.10"),
         sell_price=Decimal("6.12"),
+        sell_marketplace=Marketplace.TONNEL,
         sell_fee_pct=Decimal("0.05"),
         gift_floor=FloorQuote(
             kind="gift_floor", value=Decimal("4.8"), marketplace=Marketplace.TONNEL
@@ -33,7 +34,9 @@ def test_deal_message_contains_direct_marketplace_link():
     assert "Открыть подарок в Telegram" in message
     assert "💎 Цена: 4.8 TON (tonnel)" in message
     assert "🔒 Передача: ✅ доступна" in message
-    assert "💰 Потенциальный профит: ≈ +" in message
+    assert "💸 Ориентир перепродажи: 6.12 TON (tonnel) (активное объявление)" in message
+    assert "💰 Потенциальный профит по этой оценке: ≈ +" in message
+    assert "продажа по ней не гарантирована" in message
     assert "Флор подарка: 4.8 TON (tonnel)" in message
     assert "Флор модели: 6.12 TON (tonnel)" in message
     assert message.splitlines()[-1].endswith("Открыть подарок в Telegram</a>")

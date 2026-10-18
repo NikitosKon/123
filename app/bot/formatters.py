@@ -77,11 +77,20 @@ def format_deal(deal: DealAnalysis) -> str:
         f"🔒 Передача: {transfer}",
     ]
 
+    if deal.sell_price is not None:
+        sell_market = f" ({deal.sell_marketplace.value})" if deal.sell_marketplace else ""
+        lines += [
+            "",
+            f"💸 Ориентир перепродажи: {fmt_amount(deal.sell_price)} {l.currency.value}"
+            f"{sell_market} (активное объявление)",
+        ]
+
     if deal.net_profit is not None:
         profit = f"+{fmt_amount(deal.net_profit)}" if deal.net_profit >= 0 else fmt_amount(deal.net_profit)
-        lines += ["", f"💰 Потенциальный профит: ≈ {profit} {l.currency.value}"]
+        lines += ["", f"💰 Потенциальный профит по этой оценке: ≈ {profit} {l.currency.value}"]
+        lines += ["⚠️ Цена перепродажи взята из активных объявлений; продажа по ней не гарантирована."]
     else:
-        lines += ["", "💰 Потенциальный профит: —"]
+        lines += ["", "💰 Потенциальный профит: нет сравнимой цены перепродажи"]
 
     lines += [
         fmt_floor(deal.gift_floor, "Флор подарка", "🎁"),

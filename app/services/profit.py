@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
 
-from app.domain.enums import Confidence
+from app.domain.enums import Confidence, Marketplace
 from app.domain.models import DealAnalysis, FloorQuote, NormalizedListing
 
 CENT = Decimal("0.01")
@@ -24,6 +24,7 @@ def analyze_deal(
     *,
     buy_fee_pct: Decimal,
     sell_price: Decimal | None,
+    sell_marketplace: Marketplace | None = None,
     sell_fee_pct: Decimal = Decimal("0"),
     deposit_fee_ton: Decimal = Decimal("0"),
     withdrawal_fee_ton: Decimal = Decimal("0"),
@@ -67,7 +68,7 @@ def analyze_deal(
         buy_price=q2(buy_price),
         buy_marketplace=listing.marketplace,
         sell_price=q2(sell_price) if sell_price is not None else None,
-        sell_marketplace=(model_floor.marketplace if model_floor else None),
+        sell_marketplace=(sell_marketplace or (model_floor.marketplace if model_floor else None)),
         total_costs=q2(total_costs),
         gross_profit=q2(gross) if gross is not None else None,
         net_profit=q2(net_profit) if net_profit is not None else None,

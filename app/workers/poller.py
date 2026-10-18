@@ -123,8 +123,8 @@ class CollectorWorker:
             mf = model_floor(l, pool)
             ef = exact_variant_floor(l, pool)
 
-            # Для цены перепродажи берём ближайший ask того же model после
-            # покупки, исключая проверяемый листинг из пула.
+            # Для оценки выхода берём ближайший активный ask той же модели,
+            # исключая проверяемый листинг. Это ориентир, а не гарантированная продажа.
             resale_listing = select_resale_listing(l, pool)
             sell_price = resale_listing.price if resale_listing else None
 
@@ -132,6 +132,7 @@ class CollectorWorker:
                 l,
                 buy_fee_pct=adapter.get_marketplace_fee(),
                 sell_price=sell_price,
+                sell_marketplace=resale_listing.marketplace if resale_listing else None,
                 sell_fee_pct=Decimal("0.05"),
                 deposit_fee_ton=l.deposit_fee_ton,
                 withdrawal_fee_ton=l.withdrawal_fee_ton,
