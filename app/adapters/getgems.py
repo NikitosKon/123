@@ -18,7 +18,7 @@ import httpx
 
 from app.adapters.base import MarketplaceAdapter, parse_dt, to_decimal
 from app.domain.enums import Currency, Marketplace, SourceStatus
-from app.domain.models import NormalizedListing
+from app.domain.models import NormalizedListing, RecentSale
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ NANO = Decimal(10**9)
 HISTORY_PAGE_SIZE = 100
 MAX_HISTORY_PAGES = 3
 ACTIVE_CACHE_SECONDS = 10
+SALES_CACHE_SECONDS = 300
 
 
 class GetgemsAdapter(MarketplaceAdapter):
@@ -37,6 +38,7 @@ class GetgemsAdapter(MarketplaceAdapter):
         self.api_key = api_key.strip()
         self._collections_by_gift: dict[str, set[tuple[str, bool]]] = {}
         self._active_cache: dict[str, tuple[float, list[NormalizedListing]]] = {}
+        self._sales_cache: dict[str, tuple[float, list[RecentSale]]] = {}
 
         if not enabled:
             self.status = SourceStatus.DISABLED
@@ -217,6 +219,126 @@ class GetgemsAdapter(MarketplaceAdapter):
         except Exception as exc:  # noqa: BLE001
             self._mark_error(exc)
             raise
+
+    async def fetch_recent_sales(
+        self, gift_name: str, model: str, since: datetime, limit: int = 50
+    ) -> list[RecentSale]:
+        """История завершённых продаж по известным коллекциям подарка.
+
+        Getgems отдаёт в history NFT address/time/price; модель и название
+        подтягиваются одним пакетным запросом к /nfts/list.
+        """
+        if not self.api_key or self.status in (SourceStatus.DISABLED, SourceStatus.NOT_CONFIGURED):
+            return []
+
+        gift_key = gift_name.strip().casefold()
+        model_key = model.strip().casefold()
+        cache_key = gift_key
+        cached = self._sales_cache.get(cache_key)
+        if cached and cached[0] > time.monotonic():
+            return [sale for sale in cached[1] if sale.model.casefold() == model_key][:limit]
+
+        collections = sorted(self._collections_by_gift.get(gift_key, set()))
+        if not collections:
+            return []
+
+        since_utc = self._as_utc(since)
+        params = {
+            "minTime": int(since_utc.timestamp() * 1000),
+            "limit": min(max(limit, 1), HISTORY_PAGE_SIZE),
+            "types": "sold",
+        }
+        events: list[dict[str, Any]] = []
+        try:
+            for collection, _offchain in collections:
+                encoded = quote(collection, safe="")
+                response = await self._request(
+                    "GET", f"/collection/history/{encoded}", params=params
+                )
+                page = response if isinstance(response, dict) else {}
+                for event in page.get("items", []):
+                    if not isinstance(event, dict):
+                        continue
+                    type_data = event.get("typeData") or {}
+                    if not isinstance(type_data, dict):
+                        continue
+                    event_type = str(type_data.get("type") or event.get("type") or "sold").lower()
+                    if event_type not in {"sold", "sale"}:
+                        continue
+                    sold_at = self._event_time(event)
+                    address = str(event.get("address") or "")
+                    if address and sold_at and sold_at >= since_utc:
+                        events.append(event)
+
+            addresses = list(dict.fromkeys(str(event.get("address") or "") for event in events))
+            details: dict[str, dict[str, Any]] = {}
+            for offset in range(0, len(addresses), HISTORY_PAGE_SIZE):
+                response = await self._request(
+                    "POST",
+                    "/nfts/list",
+                    json_body={"addressList": addresses[offset : offset + HISTORY_PAGE_SIZE]},
+                )
+                page = response if isinstance(response, dict) else {}
+                for raw in page.get("items", []):
+                    if isinstance(raw, dict) and raw.get("address"):
+                        details[str(raw["address"])] = raw
+
+            result: list[RecentSale] = []
+            for event in events:
+                type_data = event.get("typeData") or {}
+                address = str(event.get("address") or "")
+                raw = details.get(address)
+                if not isinstance(type_data, dict) or not raw:
+                    continue
+                attrs = {
+                    str(item.get("traitType") or item.get("trait_type") or "").casefold(): str(
+                        item.get("value") or ""
+                    )
+                    for item in (raw.get("attributes") or [])
+                    if isinstance(item, dict)
+                }
+                item_name = str(raw.get("name") or event.get("name") or "").strip()
+                name_match = re.match(r"^(?P<gift>.+?)\s*#\s*(?P<number>\d+)$", item_name)
+                item_gift = name_match.group("gift").strip() if name_match else item_name
+                item_model = attrs.get("model", "").strip()
+                if item_gift.casefold() != gift_key or not item_model:
+                    continue
+
+                currency_value = str(type_data.get("currency") or "TON").upper()
+                if currency_value not in (Currency.TON.value, Currency.GRAM.value):
+                    continue
+                currency = Currency(currency_value)
+                price_nano = to_decimal(type_data.get("priceNano"))
+                price = price_nano / NANO if price_nano is not None else to_decimal(type_data.get("price"))
+                sold_at = self._event_time(event)
+                if price is None or price <= 0 or not sold_at:
+                    continue
+                collection = str(raw.get("collectionAddress") or "")
+                url = (
+                    f"https://getgems.io/collection/{quote(collection, safe='')}/{quote(address, safe='')}"
+                    if collection
+                    else f"https://getgems.io/nft/{quote(address, safe='')}"
+                )
+                result.append(
+                    RecentSale(
+                        marketplace=self.marketplace,
+                        listing_id=address,
+                        gift_name=item_gift,
+                        model=item_model,
+                        price=price,
+                        currency=currency,
+                        sold_at=sold_at,
+                        url=url,
+                    )
+                )
+
+            result.sort(key=lambda sale: sale.sold_at, reverse=True)
+            result = result[: min(max(limit, 1), HISTORY_PAGE_SIZE)]
+            self._sales_cache[cache_key] = (time.monotonic() + SALES_CACHE_SECONDS, result)
+            return [sale for sale in result if sale.model.casefold() == model_key][:limit]
+        except Exception as exc:  # noqa: BLE001 — history failure must not stop active listings
+            log.warning("Getgems sales history unavailable for %s/%s: %s", gift_name, model, exc)
+            return []
 
     async def fetch_listing_details(self, listing_id: str) -> NormalizedListing | None:
         if not self.api_key or self.status in (SourceStatus.DISABLED, SourceStatus.NOT_CONFIGURED):

@@ -72,6 +72,19 @@ class NormalizedListing(BaseModel):
         )
 
 
+class RecentSale(BaseModel):
+    """Нормализованная подтверждённая продажа для оценки цены выхода."""
+
+    marketplace: Marketplace
+    listing_id: str = ""
+    gift_name: str
+    model: str
+    price: Decimal
+    currency: Currency = Currency.TON
+    sold_at: datetime
+    url: str = ""
+
+
 class FloorQuote(BaseModel):
     """Один из типов floor с метаданными."""
 
@@ -97,6 +110,11 @@ class DealAnalysis(BaseModel):
     buy_marketplace: Marketplace
     sell_price: Decimal | None = None
     sell_marketplace: Marketplace | None = None
+    recent_sales_median: Decimal | None = None
+    recent_sales_count: int = 0
+    active_comparable_count: int = 0
+    marketplaces_compared: list[Marketplace] = Field(default_factory=list)
+    valuation_basis: str = ""
 
     total_costs: Decimal = Decimal("0")
     gross_profit: Decimal | None = None

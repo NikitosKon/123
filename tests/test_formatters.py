@@ -34,9 +34,9 @@ def test_deal_message_contains_direct_marketplace_link():
     assert "Открыть подарок в Telegram" in message
     assert "💎 Цена: 4.8 TON (tonnel)" in message
     assert "🔒 Передача: ✅ доступна" in message
-    assert "💸 Ориентир перепродажи: 6.12 TON (tonnel) (активное объявление)" in message
-    assert "💰 Потенциальный профит по этой оценке: ≈ +" in message
-    assert "продажа по ней не гарантирована" in message
+    assert "💸 Потенциальная цена выхода: 6.12 TON" in message
+    assert "💰 Потенциальный профит по оценке: ≈ +" in message
+    assert "фактическая цена и срок продажи не гарантированы" in message
     assert "Флор подарка: 4.8 TON (tonnel)" in message
     assert "Флор модели: 6.12 TON (tonnel)" in message
     assert message.splitlines()[-1].endswith("Открыть подарок в Telegram</a>")

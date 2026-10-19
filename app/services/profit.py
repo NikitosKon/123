@@ -35,6 +35,11 @@ def analyze_deal(
     gift_floor: FloorQuote | None = None,
     model_floor: FloorQuote | None = None,
     exact_floor: FloorQuote | None = None,
+    recent_sales_median: Decimal | None = None,
+    recent_sales_count: int = 0,
+    active_comparable_count: int = 0,
+    marketplaces_compared: list[Marketplace] | None = None,
+    valuation_basis: str = "",
 ) -> DealAnalysis:
     buy_price = listing.price
     buyer_fee = buy_price * buy_fee_pct
@@ -69,6 +74,11 @@ def analyze_deal(
         buy_marketplace=listing.marketplace,
         sell_price=q2(sell_price) if sell_price is not None else None,
         sell_marketplace=(sell_marketplace or (model_floor.marketplace if model_floor else None)),
+        recent_sales_median=(q2(recent_sales_median) if recent_sales_median is not None else None),
+        recent_sales_count=recent_sales_count,
+        active_comparable_count=active_comparable_count,
+        marketplaces_compared=marketplaces_compared or [],
+        valuation_basis=valuation_basis,
         total_costs=q2(total_costs),
         gross_profit=q2(gross) if gross is not None else None,
         net_profit=q2(net_profit) if net_profit is not None else None,

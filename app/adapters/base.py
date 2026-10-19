@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.domain.enums import Marketplace, SourceStatus
-from app.domain.models import NormalizedListing
+from app.domain.models import NormalizedListing, RecentSale
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +64,12 @@ class MarketplaceAdapter(abc.ABC):
     async def fetch_active_listings(self, gift_name: str | None = None, limit: int = 30) -> list[NormalizedListing]: ...
 
     async def fetch_sales_history(self, gift_name: str, limit: int = 50) -> list[dict[str, Any]]:
+        return []
+
+    async def fetch_recent_sales(
+        self, gift_name: str, model: str, since: datetime, limit: int = 50
+    ) -> list[RecentSale]:
+        """Фактические продажи exact gift/model; площадки без API возвращают []."""
         return []
 
     @abc.abstractmethod
