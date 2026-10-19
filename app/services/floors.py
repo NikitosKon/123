@@ -59,6 +59,23 @@ def model_floor(target: NormalizedListing, all_listings: list[NormalizedListing]
     return _quote("model_floor", pool)
 
 
+def backdrop_floor(target: NormalizedListing, all_listings: list[NormalizedListing]) -> FloorQuote:
+    """Minimum active listing for the same gift, model, and backdrop."""
+    backdrop_key = target.backdrop.strip().casefold()
+    pool = [
+        listing
+        for listing in all_listings
+        if backdrop_key
+        and listing.is_active
+        and not listing.is_auction
+        and listing.gift_name.casefold() == target.gift_name.casefold()
+        and listing.model.casefold() == target.model.casefold()
+        and listing.backdrop.strip().casefold() == backdrop_key
+        and _comparable_currency(target, listing)
+    ]
+    return _quote("backdrop_floor", pool)
+
+
 def exact_variant_floor(
     target: NormalizedListing, all_listings: list[NormalizedListing]
 ) -> FloorQuote:

@@ -19,6 +19,7 @@ import httpx
 from app.adapters.base import MarketplaceAdapter, to_decimal
 from app.domain.enums import Currency, Marketplace, SourceStatus
 from app.domain.models import NormalizedListing
+from app.domain.traits import trait_text
 
 log = logging.getLogger(__name__)
 
@@ -139,9 +140,9 @@ class PortalsAdapter(MarketplaceAdapter):
             listing_id=listing_id,
             gift_name=gift_name,
             gift_num=gift_num,
-            model=str(attrs.get("model") or ""),
-            backdrop=str(attrs.get("backdrop") or ""),
-            symbol=str(attrs.get("symbol") or ""),
+            model=trait_text(attrs.get("model") or ""),
+            backdrop=attrs.get("backdrop") or "",
+            symbol=trait_text(attrs.get("symbol") or ""),
             image_url=str(raw.get("photo_url") or ""),
             animation_url=str(raw.get("animation_url") or ""),
             price=price,

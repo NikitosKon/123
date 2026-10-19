@@ -19,6 +19,7 @@ import httpx
 from app.adapters.base import MarketplaceAdapter, parse_dt, to_decimal
 from app.domain.enums import Currency, Marketplace, SourceStatus
 from app.domain.models import NormalizedListing, RecentSale
+from app.domain.traits import trait_text
 
 log = logging.getLogger(__name__)
 
@@ -291,8 +292,8 @@ class GetgemsAdapter(MarketplaceAdapter):
                 if not isinstance(type_data, dict) or not raw:
                     continue
                 attrs = {
-                    str(item.get("traitType") or item.get("trait_type") or "").casefold(): str(
-                        item.get("value") or ""
+                    str(item.get("traitType") or item.get("trait_type") or "").casefold(): item.get(
+                        "value", ""
                     )
                     for item in (raw.get("attributes") or [])
                     if isinstance(item, dict)
@@ -300,7 +301,7 @@ class GetgemsAdapter(MarketplaceAdapter):
                 item_name = str(raw.get("name") or event.get("name") or "").strip()
                 name_match = re.match(r"^(?P<gift>.+?)\s*#\s*(?P<number>\d+)$", item_name)
                 item_gift = name_match.group("gift").strip() if name_match else item_name
-                item_model = attrs.get("model", "").strip()
+                item_model = trait_text(attrs.get("model", ""))
                 if item_gift.casefold() != gift_key or not item_model:
                     continue
 
@@ -325,6 +326,7 @@ class GetgemsAdapter(MarketplaceAdapter):
                         listing_id=address,
                         gift_name=item_gift,
                         model=item_model,
+                        backdrop=attrs.get("backdrop", ""),
                         gift_num=int(name_match.group("number")) if name_match else None,
                         price=price,
                         currency=currency,
@@ -426,8 +428,8 @@ class GetgemsAdapter(MarketplaceAdapter):
 
         attributes = raw.get("attributes") or []
         attrs = {
-            str(item.get("traitType") or item.get("trait_type") or "").casefold(): str(
-                item.get("value") or ""
+            str(item.get("traitType") or item.get("trait_type") or "").casefold(): item.get(
+                "value", ""
             )
             for item in attributes
             if isinstance(item, dict)
@@ -452,7 +454,7 @@ class GetgemsAdapter(MarketplaceAdapter):
             listing_id=address,
             gift_name=gift_name,
             gift_num=gift_num,
-            model=attrs.get("model", ""),
+            model=trait_text(attrs.get("model", "")),
             backdrop=attrs.get("backdrop", ""),
             symbol=attrs.get("symbol", ""),
             ton_contract=str(raw.get("collectionAddress") or ""),

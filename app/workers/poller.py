@@ -15,7 +15,7 @@ from app.adapters.getgems import GetgemsAdapter
 from app.bot.handlers import build_card_for_deal, ctx, send_deal_card
 from app.domain.enums import Currency, Marketplace, SourceStatus
 from app.domain.models import NormalizedListing, RecentSale
-from app.services.floors import exact_variant_floor, gift_floor, model_floor
+from app.services.floors import backdrop_floor, exact_variant_floor, gift_floor, model_floor
 from app.services.profit import analyze_deal, is_worth_alert
 from app.services.recommendations import (
     classify_sale,
@@ -117,6 +117,7 @@ class CollectorWorker:
             pool, sales, compared = await self._market_evidence(l.gift_name, l.model)
             gf = gift_floor(l, pool)
             mf = model_floor(l, pool)
+            bf = backdrop_floor(l, pool)
             ef = exact_variant_floor(l, pool)
 
             # Цена выхода ограничена и активным рынком, и медианой продаж за 30 дней.
@@ -136,9 +137,13 @@ class CollectorWorker:
                 has_executable_bids=False,
                 gift_floor=gf,
                 model_floor=mf,
+                backdrop_floor=bf,
                 exact_floor=ef,
                 recent_sales_median=estimate.recent_sales_median,
                 recent_sales_count=estimate.recent_sales_count,
+                backdrop_sales_median=estimate.backdrop_sales_median,
+                backdrop_sales_count=estimate.backdrop_sales_count,
+                backdrop_comparable_count=estimate.backdrop_comparable_count,
                 active_comparable_count=estimate.active_comparable_count,
                 marketplaces_compared=estimate.marketplaces_compared,
                 valuation_basis=estimate.basis,

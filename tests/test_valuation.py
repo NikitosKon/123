@@ -125,7 +125,10 @@ def test_getgems_history_is_normalized_and_cached_by_gift(monkeypatch):
         "nft-1": {
             "address": "nft-1",
             "name": "Precious Peach #1711",
-            "attributes": [{"traitType": "Model", "value": "Angelic"}],
+            "attributes": [
+                {"traitType": "Model", "value": "Angelic"},
+                {"traitType": "Backdrop", "value": "Onyx Black"},
+            ],
         },
         "nft-2": {
             "address": "nft-2",
@@ -153,5 +156,6 @@ def test_getgems_history_is_normalized_and_cached_by_gift(monkeypatch):
     angelic, other = asyncio.run(fetch())
 
     assert [(item.model, item.price) for item in angelic] == [("Angelic", Decimal("150"))]
+    assert angelic[0].backdrop == "Onyx Black"
     assert [(item.model, item.price) for item in other] == [("Other Model", Decimal("170"))]
     assert sum(1 for method, _ in calls if method == "GET") == 1

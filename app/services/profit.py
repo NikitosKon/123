@@ -34,9 +34,13 @@ def analyze_deal(
     has_executable_bids: bool = False,
     gift_floor: FloorQuote | None = None,
     model_floor: FloorQuote | None = None,
+    backdrop_floor: FloorQuote | None = None,
     exact_floor: FloorQuote | None = None,
     recent_sales_median: Decimal | None = None,
     recent_sales_count: int = 0,
+    backdrop_sales_median: Decimal | None = None,
+    backdrop_sales_count: int = 0,
+    backdrop_comparable_count: int = 0,
     active_comparable_count: int = 0,
     marketplaces_compared: list[Marketplace] | None = None,
     valuation_basis: str = "",
@@ -65,6 +69,9 @@ def analyze_deal(
     confidence = Confidence.LOW
     if status == "confirmed":
         confidence = Confidence.HIGH
+    elif listing.backdrop.casefold() in {"black", "onyx black"}:
+        if backdrop_comparable_count >= 3 or backdrop_sales_count >= 3:
+            confidence = Confidence.MEDIUM
     elif model_floor and model_floor.listings_count >= 3:
         confidence = Confidence.MEDIUM
 
@@ -85,7 +92,13 @@ def analyze_deal(
         roi_percent=q2(roi) if roi is not None else None,
         gift_floor=gift_floor,
         model_floor=model_floor,
+        backdrop_floor=backdrop_floor,
         exact_variant_floor=exact_floor,
+        backdrop_sales_median=(
+            q2(backdrop_sales_median) if backdrop_sales_median is not None else None
+        ),
+        backdrop_sales_count=backdrop_sales_count,
+        backdrop_comparable_count=backdrop_comparable_count,
         confidence=confidence,
         status=status,
     )

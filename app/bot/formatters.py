@@ -125,10 +125,13 @@ def format_deal(deal: DealAnalysis) -> str:
     )
     name = escape(l.gift_name)
     number = _gift_number(l)
+    backdrop = escape(l.backdrop or "—")
+    if l.backdrop_rarity_pct is not None:
+        backdrop += f" ({fmt_amount(l.backdrop_rarity_pct)}%)"
     model_line = " · ".join(
         [
             f"🛹 {escape(l.model or '—')}",
-            f"🔵 {escape(l.backdrop or '—')}",
+            f"🔵 {backdrop}",
             f"🦁 {escape(l.symbol or '—')}",
         ]
     )
@@ -139,6 +142,18 @@ def format_deal(deal: DealAnalysis) -> str:
         f"🔒 Передача: {transfer}",
         f"📊 Флор: подарок {_floor_value(deal.gift_floor)} · модель {_floor_value(deal.model_floor)}",
     ]
+
+    if l.backdrop.strip().casefold() in {"black", "onyx black"}:
+        backdrop_count = deal.backdrop_floor.listings_count if deal.backdrop_floor else 0
+        backdrop_line = (
+            f"🖤 {escape(l.backdrop)}: floor {_floor_value(deal.backdrop_floor)} · "
+            f"{backdrop_count} лист. / {deal.backdrop_sales_count} продаж"
+        )
+        if deal.backdrop_sales_median is not None:
+            backdrop_line += f" · медиана {fmt_amount(deal.backdrop_sales_median)} TON"
+        else:
+            backdrop_line += " · премия фона не подтверждена продажами"
+        lines.append(backdrop_line)
 
     if deal.recent_sales_count and deal.recent_sales_median is not None:
         lines.append(

@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.enums import Confidence, Currency, Marketplace
+from app.domain.traits import normalize_backdrop
 
 
 def utcnow() -> datetime:
@@ -61,6 +62,20 @@ class NormalizedListing(BaseModel):
 
     raw: dict[str, Any] = Field(default_factory=dict, exclude=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_backdrop_trait(cls, values: Any) -> Any:
+        if not isinstance(values, dict):
+            return values
+        normalized = dict(values)
+        backdrop, rarity = normalize_backdrop(
+            normalized.get("backdrop", ""), normalized.get("backdrop_rarity_pct")
+        )
+        normalized["backdrop"] = backdrop
+        if normalized.get("backdrop_rarity_pct") is None and rarity is not None:
+            normalized["backdrop_rarity_pct"] = rarity
+        return normalized
+
     @property
     def variant_fingerprint(self) -> str:
         return f"{self.gift_name}|{self.model}|{self.backdrop}|{self.symbol}".lower()
@@ -79,11 +94,17 @@ class RecentSale(BaseModel):
     listing_id: str = ""
     gift_name: str
     model: str
+    backdrop: str = ""
     gift_num: int | None = None
     price: Decimal
     currency: Currency = Currency.TON
     sold_at: datetime
     url: str = ""
+
+    @field_validator("backdrop", mode="before")
+    @classmethod
+    def normalize_backdrop_trait(cls, value: Any) -> str:
+        return normalize_backdrop(value)[0]
 
 
 class FloorQuote(BaseModel):
@@ -124,7 +145,11 @@ class DealAnalysis(BaseModel):
 
     gift_floor: FloorQuote | None = None
     model_floor: FloorQuote | None = None
+    backdrop_floor: FloorQuote | None = None
     exact_variant_floor: FloorQuote | None = None
+    backdrop_sales_median: Decimal | None = None
+    backdrop_sales_count: int = 0
+    backdrop_comparable_count: int = 0
 
     confidence: Confidence = Confidence.LOW
     status: str = "estimated"  # прибыль всегда estimated, если нет исполнимых bids
