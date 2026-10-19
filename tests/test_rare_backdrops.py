@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from app.adapters.getgems import GetgemsAdapter
 from app.adapters.portals import PortalsAdapter
+from app.adapters.tonnel import TonnelAdapter
 from app.bot.formatters import format_deal
 from app.domain.enums import Currency, Marketplace
 from app.domain.models import FloorQuote, NormalizedListing, RecentSale
@@ -98,6 +99,23 @@ def test_getgems_parser_keeps_rare_background_and_rarity():
     assert listing is not None
     assert listing.backdrop == "Black"
     assert listing.backdrop_rarity_pct == Decimal("0.03")
+
+
+def test_tonnel_parser_keeps_rare_background_and_rarity():
+    listing = TonnelAdapter(enabled=True).normalize_listing(
+        {
+            "gift_id": 99,
+            "name": "Precious Peach",
+            "model": "Angelic (3%)",
+            "backdrop": "onyx black (0.04%)",
+            "price": "100",
+            "status": "forsale",
+        }
+    )
+
+    assert listing is not None
+    assert listing.backdrop == "Onyx Black"
+    assert listing.backdrop_rarity_pct == Decimal("0.04")
 
 
 def test_resale_ignores_other_backdrops_for_matching_listing():

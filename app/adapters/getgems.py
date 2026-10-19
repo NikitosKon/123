@@ -456,7 +456,7 @@ class GetgemsAdapter(MarketplaceAdapter):
             gift_num=gift_num,
             model=trait_text(attrs.get("model", "")),
             backdrop=attrs.get("backdrop", ""),
-            symbol=attrs.get("symbol", ""),
+            symbol=trait_text(attrs.get("symbol", "")),
             ton_contract=str(raw.get("collectionAddress") or ""),
             ton_token_id=address,
             image_url=str(raw.get("image") or ""),
