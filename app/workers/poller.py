@@ -4,17 +4,28 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
 from aiogram import Bot
 
+from app.adapters.getgems import GetgemsAdapter
 from app.bot.handlers import build_card_for_deal, ctx, send_deal_card
 from app.domain.enums import Currency, Marketplace, SourceStatus
 from app.domain.models import NormalizedListing, RecentSale
 from app.services.floors import exact_variant_floor, gift_floor, model_floor
 from app.services.profit import analyze_deal, is_worth_alert
+from app.services.recommendations import (
+    classify_sale,
+    mark_empty_outcome_notification,
+    mark_recipient_notified,
+    pending_outcome_notifications,
+    pending_recommendations,
+    record_recommendation,
+    record_sale_outcome,
+)
 from app.services.valuation import estimate_resale
 from app.services.valuation import select_resale_listing as _select_resale_listing
 
@@ -37,6 +48,7 @@ class CollectorWorker:
         self._sales_cache: dict[str, tuple[float, list[RecentSale]]] = {}
         self._active_locks: dict[str, asyncio.Lock] = {}
         self._sales_locks: dict[str, asyncio.Lock] = {}
+        self._last_tracking_check = 0.0
 
     async def run(self) -> None:
         c = ctx()
@@ -50,6 +62,12 @@ class CollectorWorker:
             await asyncio.gather(
                 *(self._process_adapter_safely(adapter, max_age) for adapter in live_adapters)
             )
+            if c.tracking_ready and time.monotonic() - self._last_tracking_check >= 300:
+                self._last_tracking_check = time.monotonic()
+                try:
+                    await self._track_recommendation_sales()
+                except Exception as exc:  # noqa: BLE001 — tracking must not stop collection
+                    log.warning("recommendation tracking scan failed: %s", exc)
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=interval)
             except asyncio.TimeoutError:
@@ -145,12 +163,21 @@ class CollectorWorker:
                 except Exception as exc:  # noqa: BLE001
                     log.warning("card render failed: %s", exc)
 
+            delivered_to = []
             for chat_id in self.notify_chat_ids:
                 try:
                     await send_deal_card(self.bot, chat_id, deal, card)
                     stats["sent"] += 1
+                    delivered_to.append(chat_id)
                 except Exception as exc:  # noqa: BLE001
                     log.error("notify %s failed: %s", chat_id, exc)
+            if delivered_to and c.tracking_ready:
+                try:
+                    tracked = await record_recommendation(deal, delivered_to)
+                    if tracked is None:
+                        log.debug("skipped tracking %s: missing collectible identity", l.listing_id)
+                except Exception as exc:  # noqa: BLE001 — recommendations still go out if storage fails
+                    log.warning("could not save recommendation %s: %s", l.listing_id, exc)
 
         log.info(
             "%s scan: fetched=%d fresh=%d not_active=%d stale=%d "
@@ -238,3 +265,109 @@ class CollectorWorker:
                         sales.append(sale)
             self._sales_cache[evidence_key] = (time.monotonic() + 300, sales)
             return active_listings, sales, compared
+
+    async def _track_recommendation_sales(self) -> None:
+        """Match previously recommended gift numbers to confirmed Getgems sales."""
+        c = ctx()
+        getgems = next(
+            (
+                adapter
+                for adapter in c.adapters
+                if isinstance(adapter, GetgemsAdapter) and adapter.status == SourceStatus.LIVE
+            ),
+            None,
+        )
+
+        for row in await pending_outcome_notifications():
+            recipients = set(row.recipient_ids or [])
+            already_notified = set(row.notified_recipient_ids or [])
+            for chat_id in sorted(recipients - already_notified):
+                try:
+                    await self.bot.send_message(
+                        chat_id,
+                        self._format_sale_outcome(row),
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                    await mark_recipient_notified(row.id, chat_id)
+                except Exception as exc:  # noqa: BLE001 — retry on the next tracking pass
+                    log.warning("sale outcome notify %s failed: %s", chat_id, exc)
+            if not recipients:
+                await mark_empty_outcome_notification(row.id)
+
+        if getgems is None:
+            return
+
+        recommendations = await pending_recommendations()
+        grouped = defaultdict(list)
+        for row in recommendations:
+            grouped[(row.gift_name, row.model)].append(row)
+
+        for (gift_name, model), rows in grouped.items():
+            if not model:
+                continue
+            for row in rows:
+                if row.collection_address:
+                    getgems.remember_collection_for_gift(
+                        row.gift_name,
+                        row.collection_address,
+                        is_offchain=row.collection_offchain,
+                    )
+            # Populate Getgems' collection cache after a restart when a gift came from
+            # another marketplace and did not carry a collection address itself.
+            if not getgems.has_collection_for_gift(gift_name):
+                try:
+                    await getgems.fetch_active_listings(gift_name=gift_name, limit=30)
+                except Exception as exc:  # noqa: BLE001 — market tracking is best effort
+                    log.debug("cannot prime Getgems collection for %s: %s", gift_name, exc)
+            oldest = min(row.created_at for row in rows)
+            if oldest.tzinfo is None:
+                oldest = oldest.replace(tzinfo=timezone.utc)
+            sales = await getgems.fetch_recent_sales(
+                gift_name, model, oldest, limit=100
+            )
+            sales.sort(key=lambda sale: sale.sold_at)
+
+            for row in rows:
+                for sale in sales:
+                    status = classify_sale(sale, row)
+                    if status is not None:
+                        await record_sale_outcome(row.id, sale, status)
+                        break
+
+        for row in await pending_outcome_notifications():
+            recipients = set(row.recipient_ids or [])
+            already_notified = set(row.notified_recipient_ids or [])
+            for chat_id in sorted(recipients - already_notified):
+                try:
+                    await self.bot.send_message(
+                        chat_id,
+                        self._format_sale_outcome(row),
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                    await mark_recipient_notified(row.id, chat_id)
+                except Exception as exc:  # noqa: BLE001 — retry on the next tracking pass
+                    log.warning("sale outcome notify %s failed: %s", chat_id, exc)
+            if not recipients:
+                await mark_empty_outcome_notification(row.id)
+
+    @staticmethod
+    def _format_sale_outcome(row) -> str:
+        from html import escape
+
+        from app.services.recommendations import sale_delta
+
+        sale_price = row.sale_price or Decimal("0")
+        difference = sale_delta(sale_price, row.buy_price)
+        delta = f"+{difference}" if difference > 0 else str(difference)
+        title = "Продан выше цены рекомендации" if row.status == "flipped" else "Подарок продан"
+        lines = [
+            f"📈 <b>{title}</b>",
+            f"🎁 {escape(row.gift_name)} #{row.gift_num} · {escape(row.model or '—')}",
+            f"Рекомендация: {row.buy_price} {escape(row.currency)} → "
+            f"продажа: {sale_price} {escape(row.currency)} · {delta} до комиссий",
+        ]
+        if row.sale_url:
+            lines.append(f'<a href="{escape(row.sale_url, quote=True)}">Открыть продажу</a>')
+        return "\n".join(lines)

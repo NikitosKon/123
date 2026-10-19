@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from html import escape
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
@@ -17,6 +18,7 @@ from app.domain.enums import SourceStatus
 from app.services.dedup import DedupStore
 from app.services.images import GiftImageService
 from app.services.profit import analyze_deal, is_worth_alert
+from app.services.recommendations import recent_outcomes, sale_delta
 
 log = logging.getLogger(__name__)
 router = Router()
@@ -31,6 +33,7 @@ HELP = (
     "/filters — ваши фильтры\n"
     "/markets — статус маркетплейсов\n"
     "/history — история цен\n"
+    "/flips — результаты продаж по предложенным подаркам\n"
     "/settings — настройки\n"
     "/help — помощь"
 )
@@ -48,6 +51,7 @@ class BotContext:
             cache_dir=settings.image_cache_dir,
         )
         self.dedup = DedupStore()
+        self.tracking_ready = False
 
 
 _ctx: BotContext | None = None
@@ -169,6 +173,43 @@ async def cmd_watchlist(m: Message) -> None:
 @router.message(Command("history"))
 async def cmd_history(m: Message) -> None:
     await m.answer("Укажите листинг через кнопку «История цен» под карточкой.")
+
+
+@router.message(Command("flips"))
+async def cmd_flips(m: Message) -> None:
+    if not ctx().tracking_ready:
+        await m.answer(
+            "Отслеживание результатов пока выключено: к боту не подключена доступная база "
+            "PostgreSQL (DATABASE_URL)."
+        )
+        return
+    try:
+        outcomes = await recent_outcomes()
+    except Exception as exc:  # noqa: BLE001 — market tracking must not break bot commands
+        log.warning("flips lookup failed: %s", exc)
+        await m.answer("Не удалось прочитать историю результатов. Проверь подключение базы данных.")
+        return
+    if not outcomes:
+        await m.answer(
+            "Пока нет подтверждённых продаж по подаркам из рекомендаций. "
+            "Новые предложения бот будет сверять с историей продаж Getgems."
+        )
+        return
+
+    lines = ["📈 <b>Продажи после рекомендаций</b>"]
+    for row in outcomes:
+        icon = "🟢" if row.status == "flipped" else "⚪️"
+        delta = sale_delta(row.sale_price or Decimal("0"), row.buy_price)
+        movement = f"+{delta}" if delta > 0 else str(delta)
+        when = row.sale_at.strftime("%d.%m %H:%M UTC") if row.sale_at else ""
+        lines.append(
+            f"\n{icon} {escape(row.gift_name)} #{row.gift_num} · {escape(row.model or '—')}\n"
+            f"Цена рекомендации: {row.buy_price} {escape(row.currency)} → "
+            f"продажа: {row.sale_price} {escape(row.currency)} ({movement}) · {when}"
+        )
+        if row.sale_url:
+            lines.append(f'<a href="{escape(row.sale_url, quote=True)}">Открыть продажу</a>')
+    await m.answer("\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
 
 
 @router.callback_query(F.data.startswith("mute:"))

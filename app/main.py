@@ -9,7 +9,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from app.bot.handlers import setup_dispatcher
+from app.bot.handlers import ctx, setup_dispatcher
 from app.config import get_settings
 from app.workers.poller import CollectorWorker
 
@@ -23,10 +23,21 @@ log = logging.getLogger("main")
 async def amain() -> None:
     settings = get_settings()
     if not settings.bot_token:
-        raise SystemExit("BOT_TOKEN не задан — укажите его в .env или переменных окружения")
+        raise SystemExit("BOT_TOKEN не задан — заполните .env (см. .env.example)")
 
     bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = setup_dispatcher(settings)
+
+    try:
+        from app.storage.db import get_engine
+        from app.storage.models import Base
+
+        async with get_engine().begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        ctx().tracking_ready = True
+        log.info("recommendation market tracking enabled")
+    except Exception as exc:  # noqa: BLE001 — tracking is optional; the bot can still serve alerts
+        log.warning("recommendation tracking disabled; database is unavailable: %s", exc)
 
     worker = CollectorWorker(bot, notify_chat_ids=settings.admin_id_list)
 

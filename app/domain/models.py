@@ -79,6 +79,7 @@ class RecentSale(BaseModel):
     listing_id: str = ""
     gift_name: str
     model: str
+    gift_num: int | None = None
     price: Decimal
     currency: Currency = Currency.TON
     sold_at: datetime

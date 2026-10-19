@@ -4,7 +4,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.bot.formatters import telegram_gift_url
+from app.bot.formatters import purchase_url, telegram_gift_url
 from app.domain.models import DealAnalysis, NormalizedListing
 
 
@@ -14,8 +14,9 @@ def deal_keyboard(deal: DealAnalysis) -> InlineKeyboardMarkup:
     gift_url = telegram_gift_url(l)
     if gift_url:
         b.row(InlineKeyboardButton(text="🎁 Подарок в Telegram", url=gift_url))
-    if l.url:
-        b.row(InlineKeyboardButton(text=f"Купить на {l.marketplace.value}", url=l.url))
+    buy_url = purchase_url(l)
+    if buy_url:
+        b.row(InlineKeyboardButton(text=f"🛒 Купить на {l.marketplace.value}", url=buy_url))
     b.row(
         InlineKeyboardButton(text="История цен", callback_data=f"hist:{l.marketplace.value}:{l.listing_id}"),
         InlineKeyboardButton(text="Добавить в избранное", callback_data=f"fav:{l.marketplace.value}:{l.listing_id}"),
@@ -29,8 +30,9 @@ def listing_keyboard(l: NormalizedListing) -> InlineKeyboardMarkup:
     gift_url = telegram_gift_url(l)
     if gift_url:
         b.row(InlineKeyboardButton(text="🎁 Подарок в Telegram", url=gift_url))
-    if l.url:
-        b.row(InlineKeyboardButton(text=f"Купить на {l.marketplace.value}", url=l.url))
+    buy_url = purchase_url(l)
+    if buy_url:
+        b.row(InlineKeyboardButton(text=f"🛒 Купить на {l.marketplace.value}", url=buy_url))
     b.row(
         InlineKeyboardButton(text="История цен", callback_data=f"hist:{l.marketplace.value}:{l.listing_id}"),
         InlineKeyboardButton(text="В watchlist", callback_data=f"watch:{l.marketplace.value}:{l.listing_id}"),

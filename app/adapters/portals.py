@@ -1,4 +1,4 @@
-"""Portals adapter — https://portal-market.com (Telegram mini-app).
+"""Portals adapter — https://portals-market.com (Telegram mini-app).
 
 Публичного неавторизованного API нет: чтение листингов требует authData
 (initData из mini-app). Адаптер реализован; без PORTALS_AUTH_DATA — not_configured.
@@ -7,10 +7,12 @@ Fee ~6–7%.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -20,7 +22,7 @@ from app.domain.models import NormalizedListing
 
 log = logging.getLogger(__name__)
 
-API = "https://portal-market.com/api"
+API = "https://portals-market.com/api"
 
 
 class PortalsAdapter(MarketplaceAdapter):
@@ -91,15 +93,52 @@ class PortalsAdapter(MarketplaceAdapter):
         return self.normalize_listing(data)
 
     def normalize_listing(self, raw: dict[str, Any]) -> NormalizedListing | None:
+        if not isinstance(raw, dict):
+            return None
         price = to_decimal(raw.get("price"))
         if price is None:
             return None
-        attrs = {a.get("type"): a.get("value") for a in raw.get("attributes", [])}
-        return NormalizedListing(
+        raw_attributes = raw.get("attributes") or []
+        if isinstance(raw_attributes, dict):
+            attrs = {str(key).casefold(): value for key, value in raw_attributes.items()}
+        else:
+            attrs = {
+                str(a.get("type") or a.get("trait_type") or a.get("traitType") or "").casefold(): a.get("value")
+                for a in raw_attributes
+                if isinstance(a, dict)
+            }
+
+        collection = raw.get("collection")
+        if isinstance(collection, dict):
+            collection = collection.get("name") or collection.get("title")
+        name_candidates = [collection, raw.get("gift_name"), raw.get("name"), raw.get("title")]
+        name_value = next((value for value in name_candidates if value), "")
+        name_text = str(name_value).strip()
+        name_match = re.match(r"^(?P<gift>.+?)\s*#\s*(?P<number>\d+)\s*$", name_text)
+        gift_name = (name_match.group("gift") if name_match else name_text).strip()
+        number_value = next(
+            (raw.get(key) for key in ("num", "gift_num", "number", "gift_number", "giftNumber") if raw.get(key) is not None),
+            None,
+        )
+        gift_num = self._parse_gift_number(number_value)
+        if gift_num is None:
+            for candidate in name_candidates:
+                candidate_match = re.search(r"#\s*(\d+)\s*$", str(candidate or ""))
+                if candidate_match:
+                    gift_num = int(candidate_match.group(1))
+                    break
+        if not gift_name:
+            return None
+
+        listing_id = str(raw.get("id") or raw.get("nft_id") or raw.get("address") or "")
+        if not listing_id:
+            return None
+        status = str(raw.get("status") or "listed").casefold()
+        listing = NormalizedListing(
             marketplace=self.marketplace,
-            listing_id=str(raw.get("id") or ""),
-            gift_name=str(raw.get("collection") or raw.get("name") or "").split("#")[0].strip(),
-            gift_num=raw.get("num") if isinstance(raw.get("num"), int) else None,
+            listing_id=listing_id,
+            gift_name=gift_name,
+            gift_num=gift_num,
             model=str(attrs.get("model") or ""),
             backdrop=str(attrs.get("backdrop") or ""),
             symbol=str(attrs.get("symbol") or ""),
@@ -109,12 +148,26 @@ class PortalsAdapter(MarketplaceAdapter):
             currency=Currency.TON,
             marketplace_fee_pct=Decimal("6.5"),
             transferable=True,
-            is_active=raw.get("status", "listed") == "listed",
+            is_active=status in {"listed", "forsale", "for_sale", "on_sale", "active"},
             raw=raw,
         )
+        listing.url = self.build_listing_url(listing)
+        return listing
+
+    @staticmethod
+    def _parse_gift_number(value: Any) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int) and value > 0:
+            return value
+        if isinstance(value, float) and value.is_integer() and value > 0:
+            return int(value)
+        if isinstance(value, str) and value.strip().isdigit() and int(value.strip()) > 0:
+            return int(value.strip())
+        return None
 
     def get_marketplace_fee(self) -> Decimal:
         return Decimal("0.065")
 
     def build_listing_url(self, listing: NormalizedListing) -> str:
-        return f"https://t.me/portals/market?startapp=gift_{listing.listing_id}"
+        return f"https://t.me/portals/market?startapp=gift_{quote(listing.listing_id, safe='')}"

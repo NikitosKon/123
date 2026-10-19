@@ -31,15 +31,14 @@ def test_deal_message_contains_direct_marketplace_link():
     message = format_deal(deal)
 
     assert 'href="https://t.me/nft/SurgeBoard-29348"' in message
-    assert "Открыть подарок в Telegram" in message
-    assert "💎 Цена: 4.8 TON (tonnel)" in message
+    assert "🎁 Telegram" in message
+    assert "🛒 Купить" in message
+    assert "💎 Купить: 4.8 TON (tonnel)" in message
     assert "🔒 Передача: ✅ доступна" in message
-    assert "💸 Потенциальная цена выхода: 6.12 TON" in message
-    assert "💰 Потенциальный профит по оценке: ≈ +" in message
-    assert "фактическая цена и срок продажи не гарантированы" in message
-    assert "Флор подарка: 4.8 TON (tonnel)" in message
-    assert "Флор модели: 6.12 TON (tonnel)" in message
-    assert message.splitlines()[-1].endswith("Открыть подарок в Telegram</a>")
+    assert "выход ≈ 6.12 TON" in message
+    assert "Флор: подарок 4.8 TON · модель 6.12 TON" in message
+    assert "Основа оценки" not in message
+    assert "Сопоставимых активных листингов" not in message
 
 
 def test_telegram_gift_link_uses_telegram_slug_when_available():
@@ -48,3 +47,33 @@ def test_telegram_gift_link_uses_telegram_slug_when_available():
     )
     assert listing is not None
     assert telegram_gift_url(listing) == "https://t.me/nft/PreciousPeach-1711"
+
+
+def test_telegram_gift_link_parses_string_number_from_portals_payload():
+    from app.adapters.portals import PortalsAdapter
+
+    listing = PortalsAdapter(auth_data="init-data", enabled=True).normalize_listing(
+        {
+            "id": "portal-listing-1",
+            "name": "Big Year",
+            "num": "827",
+            "price": "12.5",
+            "status": "listed",
+        }
+    )
+    assert listing is not None
+    assert listing.gift_num == 827
+    assert listing.url == "https://t.me/portals/market?startapp=gift_portal-listing-1"
+    assert telegram_gift_url(listing) == "https://t.me/nft/BigYear-827"
+
+
+def test_telegram_gift_number_can_be_parsed_from_name_when_num_is_missing():
+    from app.adapters.portals import PortalsAdapter
+
+    listing = PortalsAdapter(auth_data="init-data", enabled=True).normalize_listing(
+        {"id": "portal-listing-2", "name": "Big Year #828", "price": "12.5", "status": "listed"}
+    )
+    assert listing is not None
+    assert listing.gift_name == "Big Year"
+    assert listing.gift_num == 828
+    assert telegram_gift_url(listing) == "https://t.me/nft/BigYear-828"

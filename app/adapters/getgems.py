@@ -325,6 +325,7 @@ class GetgemsAdapter(MarketplaceAdapter):
                         listing_id=address,
                         gift_name=item_gift,
                         model=item_model,
+                        gift_num=int(name_match.group("number")) if name_match else None,
                         price=price,
                         currency=currency,
                         sold_at=sold_at,
@@ -392,6 +393,18 @@ class GetgemsAdapter(MarketplaceAdapter):
         )
         key = listing.gift_name.casefold()
         self._collections_by_gift.setdefault(key, set()).add((collection, is_offchain))
+
+    def remember_collection_for_gift(
+        self, gift_name: str, collection_address: str, *, is_offchain: bool = True
+    ) -> None:
+        """Restore collection lookup for persisted recommendation tracking."""
+        if gift_name.strip() and collection_address.strip():
+            self._collections_by_gift.setdefault(gift_name.strip().casefold(), set()).add(
+                (collection_address.strip(), is_offchain)
+            )
+
+    def has_collection_for_gift(self, gift_name: str) -> bool:
+        return bool(self._collections_by_gift.get(gift_name.strip().casefold()))
 
     def normalize_listing(self, raw: dict[str, Any]) -> NormalizedListing | None:
         sale = raw.get("sale") or {}

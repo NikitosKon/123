@@ -32,8 +32,6 @@ class Gift(Base):
     type_id: Mapped[str] = mapped_column(String(64), default="")
     total_issued: Mapped[int | None] = mapped_column(nullable=True)
 
-    __table_args__ = (Index("ix_gifts_name", "name"),)
-
 
 class GiftVariant(Base):
     __tablename__ = "gift_variants"
@@ -136,6 +134,36 @@ class Alert(Base):
     net_profit: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
     roi: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Recommendation(Base):
+    """Persisted deal recommendation tracked against later marketplace sales."""
+
+    __tablename__ = "recommendations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    marketplace: Mapped[str] = mapped_column(String(32), index=True)
+    listing_id: Mapped[str] = mapped_column(String(128), index=True)
+    gift_name: Mapped[str] = mapped_column(String(128), index=True)
+    gift_num: Mapped[int] = mapped_column(index=True)
+    model: Mapped[str] = mapped_column(String(128), default="")
+    backdrop: Mapped[str] = mapped_column(String(128), default="")
+    symbol: Mapped[str] = mapped_column(String(128), default="")
+    buy_price: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    currency: Mapped[str] = mapped_column(String(8), default="TON")
+    buy_url: Mapped[str] = mapped_column(Text, default="")
+    telegram_url: Mapped[str] = mapped_column(Text, default="")
+    collection_address: Mapped[str] = mapped_column(String(128), default="")
+    collection_offchain: Mapped[bool] = mapped_column(Boolean, default=True)
+    recipient_ids: Mapped[list] = mapped_column(JSON, default=list)
+    notified_recipient_ids: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="watching", index=True)
+    sale_price: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
+    sale_marketplace: Mapped[str] = mapped_column(String(32), default="")
+    sale_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sale_url: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    outcome_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SourceHealth(Base):
