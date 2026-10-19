@@ -12,6 +12,7 @@ from app.domain.models import NormalizedListing, RecentSale
 RECENT_SALES_WINDOW = timedelta(days=30)
 MAX_RECENT_SALES = 10
 TON_CURRENCIES = {Currency.TON, Currency.GRAM}
+RARE_BACKDROPS = {"black", "onyx black"}
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,10 @@ def estimate_resale(
         and sale.currency in TON_CURRENCIES
         and sale.price > 0
         and cutoff <= _as_utc(sale.sold_at) <= now
+        and (
+            target.backdrop.strip().casefold() in RARE_BACKDROPS
+            or sale.backdrop.strip().casefold() not in RARE_BACKDROPS
+        )
     ] if target.model and target.currency in TON_CURRENCIES else []
     model_sales.sort(key=lambda sale: _as_utc(sale.sold_at), reverse=True)
     model_sales = model_sales[:MAX_RECENT_SALES]

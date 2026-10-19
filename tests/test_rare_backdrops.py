@@ -162,6 +162,39 @@ def test_confirmed_rare_background_sale_can_support_a_premium():
     assert estimate.basis == "листинги и продажи того же фона"
 
 
+def test_non_rare_backdrop_fallback_excludes_black_backdrop_sales():
+    target = _listing("buy", "100", "Blue")
+
+    estimate = estimate_resale(
+        target,
+        [target],
+        [
+            _sale("120", "Amber"),
+            _sale("700", "Black"),
+            _sale("900", "Onyx Black"),
+        ],
+    )
+
+    assert estimate.price == Decimal("120")
+    assert estimate.recent_sales_median == Decimal("120")
+    assert estimate.recent_sales_count == 1
+    assert estimate.backdrop_sales_count == 0
+
+
+def test_black_sales_alone_do_not_estimate_a_non_rare_backdrop():
+    target = _listing("buy", "100", "Blue")
+
+    estimate = estimate_resale(
+        target,
+        [target],
+        [_sale("700", "Black"), _sale("900", "Onyx Black")],
+    )
+
+    assert estimate.price is None
+    assert estimate.recent_sales_median is None
+    assert estimate.recent_sales_count == 0
+
+
 def test_deal_message_shows_rare_backdrop_evidence():
     target = _listing("buy", "100", "Black")
     deal = analyze_deal(
